@@ -10,6 +10,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import codecs
+import re
 
 driver=webdriver.Chrome(service=Service(ChromeDriverManager().install()))
 
@@ -42,25 +43,30 @@ def perform_login(driver, username, password):
     password_field.send_keys(password)
     password_field.send_keys(Keys.RETURN)
 
+
 def get_poem_urls(driver, category):
-    test_url = base_url + f"/poems/about/{category}"
-    navigate_to(driver, test_url)
+    category_url = base_url + f"/poems/about/{category}"
+    navigate_to(driver, category_url)
     for i in range(100):
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
     for i in range(6000):
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        current = driver.find_elements(By.CSS_SELECTOR, "em.current")
+        current = driver.find_elements(By.CSS_SELECTOR, "em.current")        
         if len(current) > 0 and current[-1].text == "80":
             break
+        if len(driver.find_elements(By.CSS_SELECTOR, "div.sub.inf_end")) > 0:
+            end = driver.find_element(By.CSS_SELECTOR, "div.sub.inf_end")
+            if end.text == "No more entries found":
+                break
 
     titles_a = driver.find_elements(By.CSS_SELECTOR, "a.nocolor.fn")
     hrefs = [a.get_attribute("href") for a in titles_a]
-
-    file = codecs.open("poem_urls.txt", "a+")
-    for href in hrefs:
-        file.write(href + "\n")
-    file.close()
+    with open('poem_urls.csv', 'a', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        for href in hrefs:
+            writer.writerow([href, category])
+    csv_file.close()
 
 
 base_url = "https://allpoetry.com/"
