@@ -12,27 +12,20 @@ from webdriver_manager.chrome import ChromeDriverManager
 import codecs
 import re
 
-driver=webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-
 
 def navigate_to(driver, url):
     wait = WebDriverWait(driver, 10)
     driver.get(url)
     get_url = driver.current_url
     wait.until(EC.url_to_be(url))
-    if get_url == url:
-        page_source = driver.page_source
-        return page_source
-    else:
-        return None
 
 
-def get_categories(driver):
+def get_target_categories(driver):
     all_link = driver.find_element(By.LINK_TEXT, "All »")
     all_link.click()
     all_categories = driver.find_element(By.CLASS_NAME, "all_cats")
     all_categories_a = all_categories.find_elements(By.TAG_NAME, "a")
-    return [a.text for a in all_categories_a]
+    return [a.text.lower() for a in all_categories_a]
 
 
 def perform_login(driver, username, password):
@@ -69,18 +62,20 @@ def get_poem_urls(driver, category):
     csv_file.close()
 
 
-base_url = "https://allpoetry.com/"
-navigate_to(driver, base_url)
-categories = get_categories(driver)
+if __name__ == "__main__":
+    driver=webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+    base_url = "https://allpoetry.com/"
+    navigate_to(driver, base_url)
+    target_categories = get_target_categories(driver)
+    print(target_categories)
+    
+    login_url = base_url + "/login"
+    navigate_to(driver, login_url)
+    username = input("Enter your username: ")
+    password = getpass.getpass("Enter your password: ")
 
-login_url = base_url + "/login"
-navigate_to(driver, login_url)
+    perform_login(driver, username, password)
+    for category in target_categories:
+        get_poem_urls(driver, category)
 
-username = input("Enter your username: ")
-password = getpass.getpass("Enter your password: ")
-
-perform_login(driver, username, password)
-for category in categories:
-    get_poem_urls(driver, category)
-
-driver.quit()
+    driver.quit()

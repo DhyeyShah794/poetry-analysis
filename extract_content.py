@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 import csv
 import getpass
 import time
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -16,8 +17,9 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import codecs
 import re
+from scrape import get_target_categories, navigate_to, perform_login
 
-# Uncomment to create the poem_urls_combined.csv file. To be refactored
+# Uncomment to create the poem_urls_combined.csv file. It's a one time process.
 # with open('poem_urls.csv', 'r') as f:
 #     data = f.read()
     # urls = [row.split(',')[0] for row in data.split('\n')]
@@ -36,45 +38,81 @@ import re
     #         writer.writerow([url, categories])
 
 
-def navigate_to(driver, url):  # Need to import from scrape.py instead of duplicating
-    wait = WebDriverWait(driver, 10)
-    driver.get(url)
-    get_url = driver.current_url
-    wait.until(EC.url_to_be(url))
-    if get_url == url:
-        page_source = driver.page_source
-        return page_source
-    else:
-        return None
+def is_valid(driver):
+    return not (driver.find_elements(By.CSS_SELECTOR, "h1.notop") or driver.find_elements(By.CSS_SELECTOR, "h2.error"))
 
 
-def perform_login(driver, username, password):  # Same as above
-    time.sleep(2)
-    email_field = driver.find_element(By.ID, "user_name")
-    password_field = driver.find_element(By.ID, "user_password")
-    email_field.send_keys(username)
-    password_field.send_keys(password)
-    password_field.send_keys(Keys.RETURN)
+def get_titles(driver, url, base_url):
+    title_url = url.replace(base_url, '/')
+    href = f"[href=\"{title_url}\"]"
 
-
-with open("poem_urls_combined.csv", 'r') as f:
-    # TODO: Refactor this and put it in a well-documented function
-    base_url = "https://allpoetry.com/"
-    data = f.read()
-    rows = data.split('\n')
-    urls = [row.split(',')[0] for row in rows[35_600:35_650]]
-    driver=webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-    navigate_to(driver, base_url + "/login")
-    time.sleep(2)
-    username = input("Enter your username: ")
-    password = getpass.getpass("Enter your password: ")
-    perform_login(driver, username, password)
-    time.sleep(2)
-    for url in urls:
-        driver.get(url)
+    if driver.find_elements(By.CSS_SELECTOR, "a.nocolor.fn"):
         titles = driver.find_elements(By.CSS_SELECTOR, "a.nocolor.fn")
-        title_url = url.replace(base_url, '/')
-        href = f"[href='{title_url}']"
+
+    if driver.find_elements(By.CSS_SELECTOR, href):
         titles += driver.find_elements(By.CSS_SELECTOR, href)
-        print(list(set([title.text for title in titles if title.text != ""]))[0])
-    driver.close()
+        titles = list(set([title.text for title in titles if title.text != ""]))
+        if len(titles) > 0:
+            return titles[0]
+
+    return ""
+
+
+def get_poem(driver, url):
+    if driver.find_element(By.CSS_SELECTOR, "div[class^='orig_']"):
+        poem = driver.find_element(By.CSS_SELECTOR, "div[class^='orig_']")
+        return poem.text
+    return ""
+
+
+def get_poem_categories(driver, url, target_categories):
+    if driver.find_elements(By.CSS_SELECTOR, "span.nocolor.cats_dot"):
+        span_tag = driver.find_element(By.CSS_SELECTOR, "span.nocolor.cats_dot")
+        categories = span_tag.find_elements(By.TAG_NAME, "a")
+        categories = set([category.text.lower() for category in categories])
+        return list(categories.intersection(target_categories))
+    return []
+
+
+if __name__ == "__main__":
+    # Uncomment to create the data.csv file. It's a one time process.
+    # with open('data.csv', 'w', newline='', encoding="utf-8") as csv_file:
+    #     writer = csv.writer(csv_file)
+    #     writer.writerow(["url", "title", "poem", "categories"])
+    # csv_file.close()
+
+    with open("poem_urls_combined.csv", 'r') as f:        
+        data = f.read()
+        rows = data.split('\n')
+        urls = [row.split(',')[0] for row in rows]
+
+        driver=webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+        base_url = "https://allpoetry.com/"
+        navigate_to(driver, base_url)
+        target_categories = get_target_categories(driver)
+
+        login_url = base_url + "/login"
+        navigate_to(driver, login_url)
+        username = input("Enter your username: ")
+        password = getpass.getpass("Enter your password: ")
+        perform_login(driver, username, password)
+        time.sleep(1)
+
+        for url in urls:
+            time.sleep(5)  # To reduce the load on the website server
+            try:
+                navigate_to(driver, url)
+                print(url)
+            except TimeoutException:
+                poem_title, poem_text, poem_categories = "", "", ""
+
+            if is_valid(driver):
+                poem_title = get_titles(driver, url, base_url)
+                poem_text = get_poem(driver, url)
+                poem_categories = get_poem_categories(driver, url, target_categories)
+                
+                with open('data.csv', 'a', newline='', encoding="utf-8") as csv_file:
+                    writer = csv.writer(csv_file)
+                    writer.writerow([url, poem_title, poem_text, poem_categories])
+                csv_file.close()
+        driver.close()
