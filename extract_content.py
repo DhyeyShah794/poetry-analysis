@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 import csv
 import getpass
 import time
+import os
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
@@ -19,23 +20,24 @@ import codecs
 import re
 from scrape import get_target_categories, navigate_to, perform_login
 
-# Uncomment to create the poem_urls_combined.csv file. It's a one time process.
-# with open('poem_urls.csv', 'r') as f:
-#     data = f.read()
-    # urls = [row.split(',')[0] for row in data.split('\n')]
-    # urls = urls[1:]
-    # print(len(urls))
-    # print(len(set(urls)))
 
-    # url_category = {}
-    # rows = data.split('\n')[1:]
-    # for row in rows:
-    #     url, category = row.split(',')
-    #     url_category.setdefault(url, []).append(category)
-    # with open('poem_urls_combined.csv', 'w', newline='') as csv_file:
-    #     writer = csv.writer(csv_file)
-    #     for url, categories in url_category.items():
-    #         writer.writerow([url, categories])
+if not os.path.exists('poem_urls_combined.csv'):
+    with open('poem_urls.csv', 'r') as f:
+        data = f.read()
+        urls = [row.split(',')[0] for row in data.split('\n')]
+        urls = urls[1:]
+        print(len(urls))
+        print(len(set(urls)))
+
+        url_category = {}
+        rows = data.split('\n')[1:]
+        for row in rows:
+            url, category = row.split(',')
+            url_category.setdefault(url, []).append(category)
+        with open('poem_urls_combined.csv', 'w', newline='') as csv_file:
+            writer = csv.writer(csv_file)
+            for url, categories in url_category.items():
+                writer.writerow([url, categories])
 
 
 def is_valid(driver):
@@ -74,17 +76,33 @@ def get_poem_categories(driver, url, target_categories):
     return []
 
 
-if __name__ == "__main__":
-    # Uncomment to create the data.csv file. It's a one time process.
-    # with open('data.csv', 'w', newline='', encoding="utf-8") as csv_file:
-    #     writer = csv.writer(csv_file)
-    #     writer.writerow(["url", "title", "poem", "categories"])
-    # csv_file.close()
+def find_missing_urls():
+    with open('poem_urls_combined.csv', 'r') as f:
+        data = f.read()
+        initial_urls = set([row.split(',')[0] for row in data.split('\n')])
 
-    with open("poem_urls_combined.csv", 'r') as f:        
+    with open('data.csv', 'r', encoding="utf-8") as f:
+        data = f.read()
+        reg_pattern = r"https://.*?(?=,)"
+        final_urls = set(re.findall(reg_pattern, data))
+
+    missing = initial_urls.difference(final_urls) # To find those URLS present in poem_urls_combined.csv but not in data.csv
+    missing.discard('')
+    return missing
+
+if __name__ == "__main__":
+    if not os.path.exists('data.csv'):
+        with open('data.csv', 'w', newline='', encoding="utf-8") as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow(["url", "title", "poem", "categories"])
+        csv_file.close()
+
+    with open("poem_urls.csv", 'r') as f:
         data = f.read()
         rows = data.split('\n')
         urls = [row.split(',')[0] for row in rows]
+        # Use below definition to reiterate over missing urls. Uncomment after the code above has been run first.
+        # urls = find_missing_urls()
 
         driver=webdriver.Chrome(service=Service(ChromeDriverManager().install()))
         base_url = "https://allpoetry.com/"
@@ -102,7 +120,6 @@ if __name__ == "__main__":
             time.sleep(5)  # To reduce the load on the website server
             try:
                 navigate_to(driver, url)
-                print(url)
             except TimeoutException:
                 poem_title, poem_text, poem_categories = "", "", ""
 
