@@ -90,6 +90,16 @@ def find_missing_urls():
     missing.discard('')
     return missing
 
+
+def find_duplicate_urls(filename):
+    with open(filename, 'r', encoding="utf-8") as f:
+        data = f.read()
+        reg_pattern = r"https://.*?(?=,)"
+        urls = re.findall(reg_pattern, data)
+        urls = [url for url in urls if url.startswith('https://allpoetry.com/poem')]
+        return [url for url in urls if urls.count(url) > 1]
+
+
 if __name__ == "__main__":
     if not os.path.exists('data.csv'):
         with open('data.csv', 'w', newline='', encoding="utf-8") as csv_file:
